@@ -6,7 +6,7 @@ metadata:
   name: server
   namespace: default
 spec:
-  replicas: 1
+  replicas: 5
   selector:
     matchLabels:
       service: server
@@ -17,21 +17,23 @@ spec:
         service: server
     spec:
       initContainers:
-        - name: wait-for-db
-          image: busybox:1.28
-          command: ['sh', '-c', 'until nc -zv db 5432; do echo "waiting for db"; sleep 2; done;']
+      - name: wait-for-db
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -zv db 5432; do echo "waiting for db"; sleep 2; done;']
       containers:
         - env:
             - name: PGDATABASE
               value: mydb
             - name: PGPASSWORD
-              value: whatever
+              value: myfriend
             - name: PGHOST
               value: db
             - name: PGPORT
-              value: "5432"
+              value: "26257"
             - name: PGUSER
-              value: postgres
+              value: totoro
+            - name: HTTP_PORT
+              value: "8089"
           image: DOCKER_USERNAME/REPO_NAME
           name: server
           imagePullPolicy: Always
@@ -39,7 +41,13 @@ spec:
             - containerPort: 8080
               hostPort: 8080
               protocol: TCP
-          resources: {}
+          resources: 
+            limits: 
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
       restartPolicy: Always
 status: {}
 ---
@@ -51,33 +59,42 @@ metadata:
   name: db
   namespace: default
 spec:
-  replicas: 1
+  repliccas: 1
   selector:
     matchLabels:
       service: db
-  strategy:
+  strategy: 
     type: Recreate
   template:
     metadata:
-      labels:
+      lables:
         service: db
     spec:
       containers:
         - env:
-            - name: POSTGRES_DB
+            - name: PGDATABASE
               value: mydb
-            - name: POSTGRES_PASSWORD
-              value: whatever
-            - name: POSTGRES_USER
-              value: postgres
-          image: postgres
+            - name: PGPASSWORD
+              value: myfriend
+            - name: PGUSER
+              value: totoro
+          image: cockroachdb/cockroach:v19.2.0
           name: db
+          imagePullPolicy: Always
           ports:
-            - containerPort: 5432
+            - containerPort: 26257
+              hostPort: 26257
               protocol: TCP
-          resources: {}
-      restartPolicy: Always
-status: {}
+            - containerPort: 8080
+              hostPort: 8080
+              protocol: TCP
+          resources: 
+            limits: 
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
 ---
 apiVersion: v1
 kind: Service
@@ -89,14 +106,15 @@ metadata:
 spec:
   type: NodePort
   ports:
-    - name: "8080"
-      port: 8080
+    - port: 8080
+      protocol: TCP
       targetPort: 8080
       nodePort: 30001
   selector:
     service: server
 status:
   loadBalancer: {}
+
 ---
 apiVersion: v1
 kind: Service
@@ -107,9 +125,10 @@ metadata:
   namespace: default
 spec:
   ports:
-    - name: "5432"
-      port: 5432
-      targetPort: 5432
+    - name: "26257"
+      port: 26257
+      protocol: TCP
+      targetPort: 26257
   selector:
     service: db
 status:

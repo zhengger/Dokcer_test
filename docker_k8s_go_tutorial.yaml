@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    service: server
+  name: server
+  namespace: default
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      service: server
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        service: server
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -zv db 5432; do echo "waiting for db"; sleep 2; done;']
+      containers:
+        - env:
+            - name: PGDATABASE
+              value: mydb
+            - name: PGPASSWORD
+              value: myfriend
+            - name: PGHOST
+              value: db
+            - name: PGPORT
+              value: "26257"
+            - name: PGUSER
+              value: totoro
+            - name: HTTP_PORT
+              value: "8089"
+          image: DOCKER_USERNAME/REPO_NAME
+          name: server
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              hostPort: 8080
+              protocol: TCP
+          resources: 
+            limits: 
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      restartPolicy: Always
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    service: db
+  name: db
+  namespace: default
+spec:
+  repliccas: 1
+  selector:
+    matchLabels:
+      service: db
+  strategy: 
+    type: Recreate
+  template:
+    metadata:
+      lables:
+        service: db
+    spec:
+      containers:
+        - env:
+            - name: PGDATABASE
+              value: mydb
+            - name: PGPASSWORD
+              value: myfriend
+            - name: PGUSER
+              value: totoro
+          image: cockroachdb/cockroach:v19.2.0
+          name: db
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 26257
+              hostPort: 26257
+              protocol: TCP
+            - containerPort: 8080
+              hostPort: 8080
+              protocol: TCP
+          resources: 
+            limits: 
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    service: server
+  name: server
+  namespace: default
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      nodePort: 30001
+  selector:
+    service: server
+status:
+  loadBalancer: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    service: db
+  name: db
+  namespace: default
+spec:
+  ports:
+    - name: "26257"
+      port: 26257
+      protocol: TCP
+      targetPort: 26257
+  selector:
+    service: db
+status:
+  loadBalancer: {}
